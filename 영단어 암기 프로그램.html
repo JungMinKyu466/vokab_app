@@ -1,0 +1,283 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>영단어 암기 프로그램 - 무료 영어 단어장 및 테스트 도구</title>
+
+  <!-- ✅ SEO 메타 태그 -->
+  <meta name="description" content="무료 영어 단어 암기 프로그램. 나만의 단어장을 만들고, 오답 복습 및 랜덤 테스트 기능으로 효율적인 학습을 지원합니다. 브라우저에서 바로 실행 가능!">
+  <meta name="keywords" content="영단어, 영어 단어장, 영어 암기, 단어 테스트, 오답 복습, 영어 공부, 단어장 프로그램, 웹앱 영어">
+  <meta name="author" content="JungMinKyu466">
+  <meta name="robots" content="index, follow">
+
+  <!-- ✅ Open Graph (SNS 공유용) -->
+  <meta property="og:title" content="영단어 암기 프로그램">
+  <meta property="og:description" content="설치 없이 웹에서 바로 사용하는 영어 단어 암기 도구. 나만의 단어장을 만들고 테스트하고 복습까지!">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://jungminkyu466.github.io/vokab_app/">
+  <meta property="og:image" content="https://jungminkyu466.github.io/vokab_app/og-image.jpg">
+
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; display: flex; gap: 20px; }
+    input { padding: 8px; margin: 5px; }
+    button { padding: 8px 12px; margin: 5px; }
+    .question { font-size: 20px; margin-top: 20px; }
+    .result { margin-top: 20px; }
+    #wordListSection { margin-top: 10px; }
+    #vocabPanel { width: 250px; border-left: 1px solid #ccc; padding-left: 20px; }
+    #vocabList ul { padding-left: 20px; }
+    .active-vocab { font-weight: bold; color: blue; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div style="flex: 1;">
+    <h1>영어 단어 테스트</h1>
+    <div>
+      <span>현재 단어장: <strong id="currentVocabName">(없음)</strong></span>
+    </div>
+    <input id="word" placeholder="영어 단어">
+    <input id="meaning" placeholder="뜻">
+    <button onclick="addWord()">단어 추가</button>
+    <button onclick="startTest()">테스트 시작</button>
+    <div id="wordListSection">
+      <ul id="wordList"></ul>
+    </div>
+    <div id="testSection" style="display:none;">
+      <div class="question" id="question"></div>
+      <input id="answer" placeholder="뜻 입력">
+      <button onclick="checkAnswer()">확인</button>
+    </div>
+    <div class="result" id="result"></div>
+  </div>
+  <div id="vocabPanel">
+    <h3>단어장 목록</h3>
+    <input id="newVocabName" placeholder="새 단어장 이름">
+    <button onclick="createVocabList()">생성</button>
+    <ul id="vocabList"></ul>
+    <button onclick="downloadVocab()">단어장 다운로드</button>
+    <input type="file" id="fileInput" style="display:none" onchange="uploadVocab(event)">
+    <button onclick="document.getElementById('fileInput').click()">단어장 불러오기</button>
+  </div>
+  <script>
+    const MAX_VOCABS = 10;
+    let currentVocab = null;
+    let vocabData = JSON.parse(localStorage.getItem('vocabData') || '{}');
+    let testWords = [], current = 0, correct = [], incorrect = [], isWrongTest = false;
+
+    function saveVocabData() {
+      localStorage.setItem('vocabData', JSON.stringify(vocabData));
+    }
+
+    function updateVocabListUI() {
+      const vocabList = document.getElementById('vocabList');
+      vocabList.innerHTML = '';
+      Object.keys(vocabData).forEach(name => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span class="${name === currentVocab ? 'active-vocab' : ''}">${name}</span>`;
+        li.onclick = () => {
+          currentVocab = name;
+          updateCurrentVocabDisplay();
+          updateVocabListUI();
+          renderWordList();
+        };
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '삭제';
+        delBtn.style.marginLeft = '10px';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (confirm(`${name} 단어장을 삭제할까요?`)) {
+            delete vocabData[name];
+            if (currentVocab === name) currentVocab = null;
+            saveVocabData();
+            updateVocabListUI();
+            renderWordList();
+            updateCurrentVocabDisplay();
+          }
+        };
+        li.appendChild(delBtn);
+        vocabList.appendChild(li);
+      });
+    }
+
+    function updateCurrentVocabDisplay() {
+      document.getElementById('currentVocabName').textContent = currentVocab || '(없음)';
+    }
+
+    function createVocabList() {
+      const name = document.getElementById('newVocabName').value.trim();
+      if (!name) return alert('단어장 이름을 입력하세요.');
+      if (vocabData[name]) return alert('이미 존재하는 단어장입니다.');
+      if (Object.keys(vocabData).length >= MAX_VOCABS) return alert('최대 단어장 개수를 초과했습니다.');
+      vocabData[name] = [];
+      currentVocab = name;
+      document.getElementById('newVocabName').value = '';
+      saveVocabData();
+      updateVocabListUI();
+      updateCurrentVocabDisplay();
+      renderWordList();
+    }
+
+    function addWord() {
+      if (!currentVocab) return alert('먼저 단어장을 선택하세요.');
+      const wordInput = document.getElementById('word');
+      const meaningInput = document.getElementById('meaning');
+      const word = wordInput.value.trim();
+      const meaning = meaningInput.value.trim();
+      if (!word || !meaning) return alert('단어와 뜻을 모두 입력하세요.');
+      vocabData[currentVocab].push({ word, meaning });
+      saveVocabData();
+      renderWordList();
+      wordInput.value = '';
+      meaningInput.value = '';
+      wordInput.focus();
+    }
+
+    function renderWordList() {
+      const ul = document.getElementById('wordList');
+      ul.innerHTML = '';
+      if (!currentVocab || !vocabData[currentVocab]) return;
+      vocabData[currentVocab].forEach(({ word, meaning }, index) => {
+        const li = document.createElement('li');
+        li.innerHTML = `${word} - ${meaning} 
+          <button onclick="editWord(${index})">수정</button>
+          <button onclick="deleteWord(${index})">삭제</button>`;
+        ul.appendChild(li);
+      });
+    }
+
+    function editWord(index) {
+      const entry = vocabData[currentVocab][index];
+      const newWord = prompt('단어 수정:', entry.word);
+      if (newWord === null) return;
+      const newMeaning = prompt('뜻 수정:', entry.meaning);
+      if (newMeaning === null) return;
+      vocabData[currentVocab][index] = { word: newWord.trim(), meaning: newMeaning.trim() };
+      saveVocabData();
+      renderWordList();
+    }
+
+    function deleteWord(index) {
+      if (confirm('이 단어를 삭제할까요?')) {
+        vocabData[currentVocab].splice(index, 1);
+        saveVocabData();
+        renderWordList();
+      }
+    }
+
+    function startTest() {
+      if (!currentVocab || !vocabData[currentVocab] || vocabData[currentVocab].length === 0)
+        return alert('단어장을 선택하고 단어를 추가하세요.');
+      testWords = [...vocabData[currentVocab]].sort(() => Math.random() - 0.5);
+      correct = [];
+      incorrect = [];
+      current = 0;
+      isWrongTest = false;
+      document.getElementById('testSection').style.display = 'block';
+      document.getElementById('result').innerHTML = '';
+      document.getElementById('wordListSection').style.display = 'none';
+      showQuestion();
+    }
+
+    function startWrongOnlyTest() {
+      if (incorrect.length === 0) return alert('오답이 없습니다.');
+      testWords = [...incorrect].sort(() => Math.random() - 0.5);
+      correct = [];
+      incorrect = [];
+      current = 0;
+      isWrongTest = true;
+      document.getElementById('testSection').style.display = 'block';
+      document.getElementById('result').innerHTML = '';
+      document.getElementById('wordListSection').style.display = 'none';
+      showQuestion();
+    }
+
+    function showQuestion() {
+      const word = testWords[current].word;
+      document.getElementById('question').innerText = `Q${current + 1}: ${word}`;
+      document.getElementById('answer').value = '';
+      document.getElementById('answer').focus();
+    }
+
+    function checkAnswer() {
+      const userAnswer = document.getElementById('answer').value.trim();
+      const correctAnswer = testWords[current].meaning.trim();
+      if (userAnswer === correctAnswer) {
+        correct.push(testWords[current]);
+      } else {
+        incorrect.push({ ...testWords[current], userAnswer });
+      }
+      current++;
+      if (current < testWords.length) {
+        showQuestion();
+      } else {
+        showResult();
+      }
+    }
+
+    function showResult() {
+      document.getElementById('testSection').style.display = 'none';
+      document.getElementById('wordListSection').style.display = 'block';
+      let html = `<h3>테스트 완료!</h3>`;
+      html += `<p>정답: ${correct.length}개 / 오답: ${incorrect.length}개</p>`;
+      if (incorrect.length > 0) {
+        html += '<h4>오답 목록:</h4><ul>';
+        incorrect.forEach(item => {
+          html += `<li>${item.word} - 당신의 답: ${item.userAnswer} / 정답: ${item.meaning}</li>`;
+        });
+        html += '</ul>';
+        html += '<button onclick="startWrongOnlyTest()">오답 복습</button>';
+        html += '<button onclick="clearIncorrect()">오답 초기화</button>';
+      }
+      document.getElementById('result').innerHTML = html;
+    }
+
+    function clearIncorrect() {
+      incorrect = [];
+      const resultDiv = document.getElementById('result');
+      if (resultDiv) {
+        const summaryMatch = resultDiv.innerHTML.match(/<h3>.*?<\/h3><p>정답: \d+개/);
+        const summaryText = summaryMatch ? summaryMatch[0] + ' / 오답: 0개</p>' : '<h3>테스트 완료!</h3><p>정답: ' + correct.length + '개 / 오답: 0개</p>';
+        resultDiv.innerHTML = summaryText;
+      }
+    }
+
+    function downloadVocab() {
+      if (!currentVocab) return alert('단어장을 선택하세요.');
+      const blob = new Blob([JSON.stringify(vocabData[currentVocab], null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentVocab}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function uploadVocab(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const newWords = JSON.parse(e.target.result);
+          if (!Array.isArray(newWords)) throw new Error();
+          const name = prompt('불러온 단어장의 이름을 입력하세요:');
+          if (!name) return;
+          if (vocabData[name]) {
+            if (!confirm('이미 존재하는 단어장입니다. 덮어쓸까요?')) return;
+          }
+          vocabData[name] = newWords;
+          saveVocabData();
+          updateVocabListUI();
+        } catch {
+          alert('유효하지 않은 JSON 파일입니다.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    updateVocabListUI();
+    updateCurrentVocabDisplay();
+  </script>
+</body>
+</html>
